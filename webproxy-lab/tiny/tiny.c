@@ -11,9 +11,9 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, int is_head);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
+void serve_dynamic(int fd, char *filename, char *cgiargs, int is_head);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
 
@@ -103,7 +103,7 @@ void doit(int fd){
   memcpy(version, dem_p2 + 1, ver_len);
   version[ver_len] = '\0';
 
-  if(strcmp(method, "GET") != 0){
+  if(strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0){
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
@@ -118,18 +118,20 @@ void doit(int fd){
     return;
   }
 
+  int is_head = (strcmp(method, "HEAD") == 0);
+
   if(is_static){
     if(!S_ISREG(sbuf.st_mode) || !(sbuf.st_mode & S_IRUSR)){
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
     }
-    serve_static(fd, filename, sbuf.st_size);
+    serve_static(fd, filename, sbuf.st_size, is_head);
   } else {
     if(!S_ISREG(sbuf.st_mode) || !(sbuf.st_mode & S_IXUSR)){
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
     }
-    serve_dynamic(fd, filename, cgiargs);
+    serve_dynamic(fd, filename, cgiargs, is_head);
   }
   return;
 }
@@ -201,7 +203,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs){
  * 상태 줄 + 필수 헤더 + 빈 줄 + 파일 바디 
  */
 
-void serve_static(int fd, char *filename, int filesize){
+void serve_static(int fd, char *filename, int filesize, int is_head){
   int srcfd;
   char buf[MAXBUF], filetype[MAXLINE];
   
@@ -214,7 +216,7 @@ void serve_static(int fd, char *filename, int filesize){
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf));
 
-  if(filesize == 0) return;
+  if(filesize == 0 || is_head == 1) return;
 
   /* send body */
   
@@ -240,7 +242,7 @@ void serve_static(int fd, char *filename, int filesize){
   close(srcfd);
   free(srcp);
 }
-void serve_dynamic(int fd, char *filename, char *cgiargs){
+void serve_dynamic(int fd, char *filename, char *cgiargs, int is_head){
   
   char buf[MAXBUF];
   char *emptylist[] = { NULL };
@@ -253,6 +255,7 @@ void serve_dynamic(int fd, char *filename, char *cgiargs){
   /* Response Header + body */
   if(Fork() == 0){
     setenv("QUERY_STRING", cgiargs,  1);
+    setenv("REQUEST_METHOD", is_head ? "HEAD" : "GET", 1);
     Dup2(fd, STDOUT_FILENO);
     execve(filename, emptylist, environ);
   }

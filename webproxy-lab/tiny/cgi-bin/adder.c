@@ -6,9 +6,11 @@
 
 int main(void)
 {
-  char *buf, *p;
+  char *buf, *p, *rm;
   char arg1[MAXLINE], arg2[MAXLINE], content[MAXLINE];
   int n1 = 0, n2 = 0;
+  int is_head = 0;
+
 
   /* Extract the two arguments */
   if ((buf = getenv("QUERY_STRING")) != NULL)
@@ -19,6 +21,12 @@ int main(void)
     strcpy(arg2, p + 1);
     n1 = atoi(strchr(arg1, '=') + 1);
     n2 = atoi(strchr(arg2, '=') + 1);
+  }
+
+  if((rm = getenv("REQUEST_METHOD")) != NULL){
+    if(!strcmp("HEAD", rm)){
+      is_head = 1;
+    }
   }
 
   /* Make the response body */
@@ -33,7 +41,9 @@ int main(void)
   printf("Content-type: text/html\r\n");
   printf("Content-length: %d\r\n", (int)strlen(content));
   printf("\r\n");
-  printf("%s", content);
+  if(!is_head){
+    printf("%s", content);
+  }
   fflush(stdout);
 
   exit(0);
