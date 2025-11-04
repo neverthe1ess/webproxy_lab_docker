@@ -1,23 +1,23 @@
 CC = gcc
 CFLAGS = -O0 -Wall -I . -g
-# CFLAGS = -O2 -Wall -I . -g
 
-# This flag includes the Pthreads library on a Linux box.
-# Others systems will probably require something different.
-LIB = -lpthread
+TARGETS = echoclient echoserver
+COMMON_OBJS = csapp.o
+CLIENT_OBJS = echoclient.o
+SERVER_OBJS = echoserver.o echo.o
 
-all: tiny cgi
+.PHONY: all clean
 
-tiny: tiny.c csapp.o
-	$(CC) $(CFLAGS) -o tiny tiny.c csapp.o $(LIB)
+all: $(TARGETS)
 
-csapp.o: csapp.c
-	$(CC) $(CFLAGS) -c csapp.c
+echoclient: $(CLIENT_OBJS) $(COMMON_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
 
-cgi:
-	(cd cgi-bin; make)
+echoserver: $(SERVER_OBJS) $(COMMON_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^
+
+%.o: %.c csapp.h
+	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f *.o tiny *~
-	(cd cgi-bin; make clean)
-
+	rm -f $(TARGETS) *.o

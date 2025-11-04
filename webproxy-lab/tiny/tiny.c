@@ -61,6 +61,7 @@ int main(int argc, char **argv)
  */
 
 void doit(int fd){
+ 
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   struct stat sbuf;
@@ -143,10 +144,10 @@ void doit(int fd){
 void read_requesthdrs(rio_t *rp){
   char buf[MAXLINE];
 
-  Rio_readlineb(rp, buf, MAXLINE);
-  while(strcmp(buf, "\r\n")){
+  do{
     Rio_readlineb(rp, buf, MAXLINE);
-  }
+    //printf("%s", buf);
+  } while(strcmp(buf, "\r\n"));
   return;
 }
 
@@ -213,12 +214,31 @@ void serve_static(int fd, char *filename, int filesize){
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf));
 
+  if(filesize == 0) return;
+
   /* send body */
+  
+  const size_t CHUNKSIZE = 64 * 8192;
+  char *srcp = (char *)malloc(CHUNKSIZE);
+  if(srcp == NULL){
+    unix_error("malloc fail");
+    return;
+  }
+
   srcfd = Open(filename, O_RDONLY, 0);
-  void *srcp = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+  size_t left = (size_t) filesize;
+
+  while(left > 0){
+    size_t want = (left < CHUNKSIZE) ? left : CHUNKSIZE;
+    ssize_t nr = Rio_readn(srcfd, srcp, want);
+    if(nr <= 0){
+      break;
+    }
+    Rio_writen(fd, srcp, nr);
+    left -= nr;
+  }
   close(srcfd);
-  Rio_writen(fd, srcp, filesize);
-  munmap(srcp, filesize);
+  free(srcp);
 }
 void serve_dynamic(int fd, char *filename, char *cgiargs){
   
@@ -250,8 +270,10 @@ void get_filetype(char *filename, char *filetype){
     strcpy(filetype, "image/png");
   } else if(strstr(filename, ".gif")){
     strcpy(filetype, "image/gif");
-  } else if(strstr(filename, "html")){
+  } else if(strstr(filename, ".html")){
     strcpy(filetype, "text/html");
+  } else if(strstr(filename, ".mp4")){
+    strcpy(filetype, "video/mp4");
   } else {
     strcpy(filetype, "text/plain");
   }
